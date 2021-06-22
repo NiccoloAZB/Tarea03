@@ -1,0 +1,228 @@
+---
+title: "TAREA 03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Preparativos 
+```{r cargapaquetes, message=FALSE, warning=FALSE}
+#carga de paquetes
+library(dplyr)
+library(sf)
+library(DT)
+library(plotly)
+library(leaflet)
+library(rgdal)
+library(raster)
+library(spData)
+```
+```{r}
+# Primates de Costa Rica
+primates_cr <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/gbif/primates-cr-registros.csv",
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ),
+    quiet = TRUE
+  )
+```
+```{r}
+# Capa geespacial de cantones
+cantones <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_cantones_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+
+```
+```{r}
+# Asignación de CRS
+st_crs(primates_cr) = 4326
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+# Cruce espacial con la tabla de cantones, para obtener el nombre del cantón
+primates_cr <- 
+  primates_cr %>%
+  st_join(cantones["canton"])
+```
+```{r}
+#capa raster
+alt <- getData(
+  "worldclim",
+  var = "alt",
+  res = .5,
+  lon = -84,
+  lat = 10
+)
+
+# Lectura de una capa vectorial mediante st_read()
+provincias <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_provincias_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+# Capa de altitud recortada para los límites aproximados de Costa Rica
+altitud <- crop(alt, extent(-86, -82.3, 8, 11.3))
+```
+
+# Tabla con registros.
+```{r}
+# Tabla de registros
+primates_cr %>%
+  st_drop_geometry() %>%
+  select(family, species, stateProvince, canton, eventDate) %>%
+  datatable(colnames = c(
+    "Familia",
+    "Especie",
+    "Provincia",
+    "Cantón",
+    "Fecha"), 
+    options = list(searchHighlight = TRUE)
+           )
+```
+## arreglar el hud a español todavia
+
+
+```{r}
+gresgistros <-
+data.frame("Categorie" = rownames(primates_cr), primates_cr)
+gresgistros3 <- gresgistros[, c('Categorie','species', 'recordNumber')]
+
+```
+```{r}
+plot_ly(
+gresgistros3,
+labels = ~ species ,
+type = 'pie'
+) %>%
+  layout(
+title = 'Cantidad de resgistro de las especies y el porcentaje.',
+xaxis = list(
+showgrid = FALSE,
+zeroline = FALSE,
+showticklabels = FALSE
+),
+yaxis = list(
+showgrid = FALSE,
+zeroline = FALSE,
+showticklabels = FALSE
+)
+)
+
+```
+# filtrado de Especies
+```{r}
+Ateles <- primates_cr %>%
+  filter(species == "Ateles geoffroyi")
+```
+```{r}
+Cebus <- primates_cr %>%
+  filter(species == "Cebus capucinus")
+```
+```{r}
+Alouatta <- primates_cr %>%
+  filter(species == "Alouatta palliata")
+```
+```{r}
+Saimiri <- primates_cr %>%
+  filter(species == "Saimiri oerstedii")
+```
+
+
+# Mapa de distribucion
+```{r}
+# Mapa de registros de presencia
+primates_cr %>%
+  select(stateProvince,
+         canton,
+         eventDate,
+         species) %>%
+  leaflet() %>%
+  addProviderTiles(providers$OpenStreetMap.Mapnik, group = "OpenStreetMap") %>%
+  addProviderTiles(providers$Stamen.TonerLite, group = "Stamen Toner Lite") %>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "Imágenes de ESRI") %>%
+  addCircleMarkers(
+    data = Ateles,
+    stroke = F,
+    radius = 2,
+    fillColor = 'gray',
+    fillOpacity = 1,
+    popup = paste(
+      primates_cr$stateProvince,
+      primates_cr$canton,
+      primates_cr$eventDate,
+      primates_cr$species,
+      sep = '<br/>'
+    ),
+    group = "Ateles"
+  ) %>%
+  addCircleMarkers(
+    data = Cebus,
+    stroke = F,
+    radius = 2,
+    fillColor = 'green',
+    fillOpacity = 1,
+    popup = paste(
+      primates_cr$stateProvince,
+      primates_cr$canton,
+      primates_cr$eventDate,
+      primates_cr$species,
+      sep = '<br/>'
+    ),
+    group = "Cebus"
+  ) %>%
+  addCircleMarkers(
+    data = Alouatta,
+    stroke = F,
+    radius = 2,
+    fillColor = 'blue',
+    fillOpacity = 1,
+    popup = paste(
+      primates_cr$stateProvince,
+      primates_cr$canton,
+      primates_cr$eventDate,
+      primates_cr$species,
+      sep = '<br/>'
+    ),
+    group = "Alouatta"
+  ) %>%
+  addCircleMarkers(
+    data = Saimiri,
+    stroke = F,
+    radius = 2,
+    fillColor = 'purple',
+    fillOpacity = 1,
+    popup = paste(
+      primates_cr$stateProvince,
+      primates_cr$canton,
+      primates_cr$eventDate,
+      primates_cr$species,
+      sep = '<br/>'
+    ),
+    group = "Saimiri"
+  ) %>%
+  addLayersControl(
+    baseGroups = c("OpenStreetMap", "Stamen Toner Lite", "Imágenes de ESRI"), 
+    overlayGroups = c("Ateles", "Alouatta","Cebus", "Saimiri")
+  ) %>%
+  addMiniMap(
+    tiles = providers$Stamen.OpenStreetMap.Mapnik,
+    position = "bottomleft",
+    toggleDisplay = TRUE
+  )
+```
+
+
+
+
+
+
+
+
+
